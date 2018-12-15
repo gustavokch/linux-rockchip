@@ -979,7 +979,7 @@ struct v4l2_buffer {
  * Returns the scalar nanosecond representation of the timeval
  * parameter.
  */
-static inline u64 v4l2_timeval_to_ns(const struct timeval *tv)
+static inline __u64 v4l2_timeval_to_ns(const struct timeval *tv)
 {
 	return (__u64)tv->tv_sec * 1000000000ULL + tv->tv_usec * 1000;
 }
