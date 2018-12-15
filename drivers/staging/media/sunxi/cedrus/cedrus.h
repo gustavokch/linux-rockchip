@@ -58,6 +58,7 @@ struct cedrus_control {
 struct cedrus_h264_run {
 	const struct v4l2_ctrl_h264_decode_param	*decode_param;
 	const struct v4l2_ctrl_h264_pps			*pps;
+	const struct v4l2_ctrl_h264_scaling_matrix	*scaling_matrix;
 	const struct v4l2_ctrl_h264_slice_param		*slice_param;
 	const struct v4l2_ctrl_h264_sps			*sps;
 };
@@ -114,6 +115,8 @@ struct cedrus_ctx {
 			dma_addr_t	mv_col_buf_dma;
 			ssize_t		mv_col_buf_field_size;
 			ssize_t		mv_col_buf_size;
+			void		*neighbor_info_buf;
+			dma_addr_t	neighbor_info_buf_dma;
 			void		*pic_info_buf;
 			dma_addr_t	pic_info_buf_dma;
 		} h264;
