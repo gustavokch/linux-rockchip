@@ -1049,6 +1049,12 @@ static enum drm_mode_status vop_crtc_mode_valid(struct drm_crtc *crtc,
 	long rounded_rate;
 	long lowest, highest;
 
+	if (mode->hdisplay > 3840)
+		return MODE_VIRTUAL_X;
+
+	if (mode->vdisplay > 2160)
+		return MODE_VIRTUAL_Y;
+
 	rounded_rate = clk_round_rate(vop->dclk, mode->clock * 1000 + 999);
 	if (rounded_rate < 0)
 		return MODE_NOCLOCK;
