@@ -25,7 +25,8 @@ properties:
       - rockchip,rk3126-vop
       - rockchip,rk3188-vop
       - rockchip,rk3228-vop
-      - rockchip,rk3288-vop
+      - rockchip,rk3288-vop-big
+      - rockchip,rk3288-vop-lit
       - rockchip,rk3328-vop
       - rockchip,rk3366-vop
       - rockchip,rk3368-vop
@@ -102,7 +103,7 @@ examples:
     #include <dt-bindings/interrupt-controller/arm-gic.h>
     #include <dt-bindings/power/rk3288-power.h>
     vopb: vopb@ff930000 {
-      compatible = "rockchip,rk3288-vop";
+      compatible = "rockchip,rk3288-vop-big";
       reg = <0xff930000 0x19c>,
             <0xff931000 0x1000>;
       interrupts = <GIC_SPI 15 IRQ_TYPE_LEVEL_HIGH>;
