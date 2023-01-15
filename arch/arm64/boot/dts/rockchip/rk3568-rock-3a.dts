@@ -526,14 +526,15 @@
 };
 
 &mdio1 {
+	reset-delay-us = <20000>;
+	reset-post-delay-us = <50000>;
+	reset-gpios = <&gpio3 RK_PB0 GPIO_ACTIVE_LOW>;
+
 	rgmii_phy1: ethernet-phy@0 {
 		compatible = "ethernet-phy-ieee802.3-c22";
 		reg = <0x0>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&eth_phy_rst>;
-		reset-assert-us = <20000>;
-		reset-deassert-us = <100000>;
-		reset-gpios = <&gpio3 RK_PB0 GPIO_ACTIVE_LOW>;
 	};
 };
 
