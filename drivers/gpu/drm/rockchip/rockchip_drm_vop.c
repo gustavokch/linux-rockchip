@@ -23,11 +23,12 @@
 #include <drm/drm_atomic_uapi.h>
 #include <drm/drm_blend.h>
 #include <drm/drm_crtc.h>
+#include <drm/drm_fb_dma_helper.h>
 #include <drm/drm_flip_work.h>
 #include <drm/drm_fourcc.h>
 #include <drm/drm_framebuffer.h>
 #include <drm/drm_gem_atomic_helper.h>
-#include <drm/drm_gem_framebuffer_helper.h>
+#include <drm/drm_gem_dma_helper.h>
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_self_refresh_helper.h>
 #include <drm/drm_vblank.h>
@@ -37,7 +38,6 @@
 #endif
 
 #include "rockchip_drm_drv.h"
-#include "rockchip_drm_gem.h"
 #include "rockchip_drm_fb.h"
 #include "rockchip_drm_vop.h"
 #include "rockchip_rgb.h"
@@ -616,19 +616,6 @@ static int vop_enable(struct drm_crtc *crtc, struct drm_crtc_state *old_state)
 	if (WARN_ON(ret < 0))
 		goto err_disable_core;
 
-	/*
-	 * Slave iommu shares power, irq and clock with vop.  It was associated
-	 * automatically with this master device via common driver code.
-	 * Now that we have enabled the clock we attach it to the shared drm
-	 * mapping.
-	 */
-	ret = rockchip_drm_dma_attach_device(vop->drm_dev, vop->dev);
-	if (ret) {
-		DRM_DEV_ERROR(vop->dev,
-			      "failed to attach dma mapping, %d\n", ret);
-		goto err_disable_dclk;
-	}
-
 	spin_lock(&vop->reg_lock);
 	for (i = 0; i < vop->len; i += 4)
 		writel_relaxed(vop->regsbak[i / 4], vop->regs + i);
@@ -747,11 +734,6 @@ static void vop_crtc_atomic_disable(struct drm_crtc *crtc,
 	vop_dsp_hold_valid_irq_disable(vop);
 
 	vop->is_enabled = false;
-
-	/*
-	 * vop standby complete, so iommu detach is safe.
-	 */
-	rockchip_drm_dma_detach_device(vop->drm_dev, vop->dev);
 
 	clk_disable(vop->dclk);
 	vop_core_clks_disable(vop);
@@ -908,8 +890,7 @@ static void vop_plane_atomic_update(struct drm_plane *plane,
 	uint32_t act_info, dsp_info, dsp_st;
 	struct drm_rect *src = &new_state->src;
 	struct drm_rect *dest = &new_state->dst;
-	struct drm_gem_object *obj, *uv_obj;
-	struct rockchip_gem_object *rk_obj, *rk_uv_obj;
+	struct drm_gem_dma_object *gem, *gem_uv;
 	unsigned long offset;
 	dma_addr_t dma_addr;
 	uint32_t val;
@@ -933,8 +914,7 @@ static void vop_plane_atomic_update(struct drm_plane *plane,
 		return;
 	}
 
-	obj = fb->obj[0];
-	rk_obj = to_rockchip_obj(obj);
+	gem = drm_fb_dma_get_gem_obj(fb, 0);
 
 	actual_w = drm_rect_width(src) >> 16;
 	actual_h = drm_rect_height(src) >> 16;
@@ -949,7 +929,7 @@ static void vop_plane_atomic_update(struct drm_plane *plane,
 
 	offset = (src->x1 >> 16) * fb->format->cpp[0];
 	offset += (src->y1 >> 16) * fb->pitches[0];
-	dma_addr = rk_obj->dma_addr + offset + fb->offsets[0];
+	dma_addr = gem->dma_addr + offset + fb->offsets[0];
 
 	/*
 	 * For y-mirroring we need to move address
@@ -986,13 +966,12 @@ static void vop_plane_atomic_update(struct drm_plane *plane,
 		int vsub = fb->format->vsub;
 		int bpp = fb->format->cpp[1];
 
-		uv_obj = fb->obj[1];
-		rk_uv_obj = to_rockchip_obj(uv_obj);
+		gem_uv = drm_fb_dma_get_gem_obj(fb, 1);
 
 		offset = (src->x1 >> 16) * bpp / hsub;
 		offset += (src->y1 >> 16) * fb->pitches[1] / vsub;
 
-		dma_addr = rk_uv_obj->dma_addr + offset + fb->offsets[1];
+		dma_addr = gem_uv->dma_addr + offset + fb->offsets[1];
 		VOP_WIN_SET(vop, win, uv_vir, DIV_ROUND_UP(fb->pitches[1], 4));
 		VOP_WIN_SET(vop, win, uv_mst, dma_addr);
 

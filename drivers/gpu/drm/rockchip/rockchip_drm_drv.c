@@ -13,7 +13,6 @@
 #include <linux/of_platform.h>
 #include <linux/component.h>
 #include <linux/console.h>
-#include <linux/iommu.h>
 
 #include <drm/drm_aperture.h>
 #include <drm/drm_drv.h>
@@ -23,17 +22,8 @@
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_vblank.h>
 
-#if defined(CONFIG_ARM_DMA_USE_IOMMU)
-#include <asm/dma-iommu.h>
-#else
-#define arm_iommu_detach_device(...)	({ })
-#define arm_iommu_release_mapping(...)	({ })
-#define to_dma_iommu_mapping(dev) NULL
-#endif
-
 #include "rockchip_drm_drv.h"
 #include "rockchip_drm_fb.h"
-#include "rockchip_drm_gem.h"
 
 #define DRIVER_NAME	"rockchip"
 #define DRIVER_DESC	"RockChip Soc DRM"
@@ -43,100 +33,19 @@
 
 static const struct drm_driver rockchip_drm_driver;
 
-/*
- * Attach a (component) device to the shared drm dma mapping from master drm
- * device.  This is used by the VOPs to map GEM buffers to a common DMA
- * mapping.
- */
-int rockchip_drm_dma_attach_device(struct drm_device *drm_dev,
-				   struct device *dev)
-{
-	struct rockchip_drm_private *private = drm_dev->dev_private;
-	int ret;
-
-	if (!private->domain)
-		return 0;
-
-	if (IS_ENABLED(CONFIG_ARM_DMA_USE_IOMMU)) {
-		struct dma_iommu_mapping *mapping = to_dma_iommu_mapping(dev);
-
-		if (mapping) {
-			arm_iommu_detach_device(dev);
-			arm_iommu_release_mapping(mapping);
-		}
-	}
-
-	ret = iommu_attach_device(private->domain, dev);
-	if (ret) {
-		DRM_DEV_ERROR(dev, "Failed to attach iommu device\n");
-		return ret;
-	}
-
-	return 0;
-}
-
-void rockchip_drm_dma_detach_device(struct drm_device *drm_dev,
-				    struct device *dev)
-{
-	struct rockchip_drm_private *private = drm_dev->dev_private;
-
-	if (!private->domain)
-		return;
-
-	iommu_detach_device(private->domain, dev);
-}
-
 void rockchip_drm_dma_init_device(struct drm_device *drm_dev,
 				  struct device *dev)
 {
-	struct rockchip_drm_private *private = drm_dev->dev_private;
-
-	if (!device_iommu_mapped(dev))
-		private->iommu_dev = ERR_PTR(-ENODEV);
-	else if (!private->iommu_dev)
-		private->iommu_dev = dev;
-}
-
-static int rockchip_drm_init_iommu(struct drm_device *drm_dev)
-{
-	struct rockchip_drm_private *private = drm_dev->dev_private;
-	struct iommu_domain_geometry *geometry;
-	u64 start, end;
-
-	if (IS_ERR_OR_NULL(private->iommu_dev))
-		return 0;
-
-	private->domain = iommu_domain_alloc(private->iommu_dev->bus);
-	if (!private->domain)
-		return -ENOMEM;
-
-	geometry = &private->domain->geometry;
-	start = geometry->aperture_start;
-	end = geometry->aperture_end;
-
-	DRM_DEBUG("IOMMU context initialized (aperture: %#llx-%#llx)\n",
-		  start, end);
-	drm_mm_init(&private->mm, start, end - start + 1);
-	mutex_init(&private->mm_lock);
-
-	return 0;
-}
-
-static void rockchip_iommu_cleanup(struct drm_device *drm_dev)
-{
-	struct rockchip_drm_private *private = drm_dev->dev_private;
-
-	if (!private->domain)
-		return;
-
-	drm_mm_takedown(&private->mm);
-	iommu_domain_free(private->domain);
+	if (of_find_property(dev->of_node, "iommus", NULL)) {
+		int ret = of_dma_configure(drm_dev->dev, dev->of_node, true);
+		if (ret)
+			DRM_DEV_ERROR(dev, "Failed to init iommu device: %d\n", ret);
+	}
 }
 
 static int rockchip_drm_bind(struct device *dev)
 {
 	struct drm_device *drm_dev;
-	struct rockchip_drm_private *private;
 	int ret;
 
 	/* Remove existing drivers that may own the framebuffer memory. */
@@ -154,14 +63,6 @@ static int rockchip_drm_bind(struct device *dev)
 
 	dev_set_drvdata(dev, drm_dev);
 
-	private = devm_kzalloc(drm_dev->dev, sizeof(*private), GFP_KERNEL);
-	if (!private) {
-		ret = -ENOMEM;
-		goto err_free;
-	}
-
-	drm_dev->dev_private = private;
-
 	ret = drmm_mode_config_init(drm_dev);
 	if (ret)
 		goto err_free;
@@ -173,13 +74,9 @@ static int rockchip_drm_bind(struct device *dev)
 	if (ret)
 		goto err_free;
 
-	ret = rockchip_drm_init_iommu(drm_dev);
-	if (ret)
-		goto err_unbind_all;
-
 	ret = drm_vblank_init(drm_dev, drm_dev->mode_config.num_crtc);
 	if (ret)
-		goto err_iommu_cleanup;
+		goto err_unbind_all;
 
 	drm_mode_config_reset(drm_dev);
 
@@ -195,8 +92,6 @@ static int rockchip_drm_bind(struct device *dev)
 	return 0;
 err_kms_helper_poll_fini:
 	drm_kms_helper_poll_fini(drm_dev);
-err_iommu_cleanup:
-	rockchip_iommu_cleanup(drm_dev);
 err_unbind_all:
 	component_unbind_all(dev, drm_dev);
 err_free:
@@ -214,20 +109,28 @@ static void rockchip_drm_unbind(struct device *dev)
 
 	drm_atomic_helper_shutdown(drm_dev);
 	component_unbind_all(dev, drm_dev);
-	rockchip_iommu_cleanup(drm_dev);
 
 	drm_dev_put(drm_dev);
 }
 
-DEFINE_DRM_GEM_FOPS(rockchip_drm_driver_fops);
+static int drm_rockchip_gem_dumb_create(struct drm_file *file_priv,
+				     struct drm_device *drm,
+				     struct drm_mode_create_dumb *args)
+{
+        /*
+         * We need 64bytes aligned stride, and PAGE aligned size
+         */
+        args->pitch = ALIGN(DIV_ROUND_UP(args->width * args->bpp, 8), SZ_64);
+        args->size = PAGE_ALIGN(args->pitch * args->height);
+
+	return drm_gem_dma_dumb_create_internal(file_priv, drm, args);
+}
+
+DEFINE_DRM_GEM_DMA_FOPS(rockchip_drm_driver_fops);
 
 static const struct drm_driver rockchip_drm_driver = {
 	.driver_features	= DRIVER_MODESET | DRIVER_GEM | DRIVER_ATOMIC,
-	.dumb_create		= rockchip_gem_dumb_create,
-	.prime_handle_to_fd	= drm_gem_prime_handle_to_fd,
-	.prime_fd_to_handle	= drm_gem_prime_fd_to_handle,
-	.gem_prime_import_sg_table	= rockchip_gem_prime_import_sg_table,
-	.gem_prime_mmap		= drm_gem_prime_mmap,
+	DRM_GEM_DMA_DRIVER_OPS_WITH_DUMB_CREATE(drm_rockchip_gem_dumb_create),
 	.fops			= &rockchip_drm_driver_fops,
 	.name	= DRIVER_NAME,
 	.desc	= DRIVER_DESC,

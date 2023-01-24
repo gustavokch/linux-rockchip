@@ -22,7 +22,6 @@
 
 struct drm_device;
 struct drm_connector;
-struct iommu_domain;
 
 struct rockchip_crtc_state {
 	struct drm_crtc_state base;
@@ -38,29 +37,12 @@ struct rockchip_crtc_state {
 #define to_rockchip_crtc_state(s) \
 		container_of(s, struct rockchip_crtc_state, base)
 
-/*
- * Rockchip drm private structure.
- *
- * @crtc: array of enabled CRTCs, used to map from "pipe" to drm_crtc.
- * @num_pipe: number of pipes for this device.
- * @mm_lock: protect drm_mm on multi-threads.
- */
-struct rockchip_drm_private {
-	struct iommu_domain *domain;
-	struct device *iommu_dev;
-	struct mutex mm_lock;
-	struct drm_mm mm;
-};
 
 struct rockchip_encoder {
 	int crtc_endpoint_id;
 	struct drm_encoder encoder;
 };
 
-int rockchip_drm_dma_attach_device(struct drm_device *drm_dev,
-				   struct device *dev);
-void rockchip_drm_dma_detach_device(struct drm_device *drm_dev,
-				    struct device *dev);
 void rockchip_drm_dma_init_device(struct drm_device *drm_dev,
 				  struct device *dev);
 int rockchip_drm_wait_vact_end(struct drm_crtc *crtc, unsigned int mstimeout);

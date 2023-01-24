@@ -27,8 +27,10 @@
 #include <drm/drm_crtc.h>
 #include <drm/drm_crtc_helper.h>
 #include <drm/drm_debugfs.h>
+#include <drm/drm_fb_dma_helper.h>
 #include <drm/drm_flip_work.h>
 #include <drm/drm_framebuffer.h>
+#include <drm/drm_gem_dma_helper.h>
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_vblank.h>
 
@@ -36,7 +38,6 @@
 #include <dt-bindings/soc/rockchip,vop2.h>
 
 #include "rockchip_drm_drv.h"
-#include "rockchip_drm_gem.h"
 #include "rockchip_drm_fb.h"
 #include "rockchip_drm_vop2.h"
 
@@ -834,12 +835,6 @@ static void vop2_enable(struct vop2 *vop2)
 		return;
 	}
 
-	ret = rockchip_drm_dma_attach_device(vop2->drm, vop2->dev);
-	if (ret) {
-		drm_err(vop2->drm, "failed to attach dma mapping, %d\n", ret);
-		return;
-	}
-
 	if (vop2->data->soc_id == 3566)
 		vop2_writel(vop2, RK3568_OTP_WIN_EN, 1);
 
@@ -864,8 +859,6 @@ static void vop2_enable(struct vop2 *vop2)
 
 static void vop2_disable(struct vop2 *vop2)
 {
-	rockchip_drm_dma_detach_device(vop2->drm, vop2->dev);
-
 	pm_runtime_put_sync(vop2->dev);
 
 	clk_disable_unprepare(vop2->aclk);
@@ -1091,7 +1084,7 @@ static void vop2_plane_atomic_update(struct drm_plane *plane,
 	bool ymirror = pstate->rotation & DRM_MODE_REFLECT_Y ? true : false;
 	bool rotate_270 = pstate->rotation & DRM_MODE_ROTATE_270;
 	bool rotate_90 = pstate->rotation & DRM_MODE_ROTATE_90;
-	struct rockchip_gem_object *rk_obj;
+	struct drm_gem_dma_object *gem, *gem_uv;
 	unsigned long offset;
 	bool afbc_en;
 	dma_addr_t yrgb_mst;
@@ -1122,9 +1115,9 @@ static void vop2_plane_atomic_update(struct drm_plane *plane,
 	else
 		offset += (src->y1 >> 16) * fb->pitches[0];
 
-	rk_obj = to_rockchip_obj(fb->obj[0]);
+	gem = drm_fb_dma_get_gem_obj(fb, 0);
 
-	yrgb_mst = rk_obj->dma_addr + offset + fb->offsets[0];
+	yrgb_mst = gem->dma_addr + offset + fb->offsets[0];
 	if (fb->format->is_yuv) {
 		int hsub = fb->format->hsub;
 		int vsub = fb->format->vsub;
@@ -1135,8 +1128,8 @@ static void vop2_plane_atomic_update(struct drm_plane *plane,
 		if ((pstate->rotation & DRM_MODE_REFLECT_Y) && !afbc_en)
 			offset += fb->pitches[1] * ((pstate->src_h >> 16) - 2) / vsub;
 
-		rk_obj = to_rockchip_obj(fb->obj[0]);
-		uv_mst = rk_obj->dma_addr + offset + fb->offsets[1];
+		gem_uv = drm_fb_dma_get_gem_obj(fb, 1);
+		uv_mst = gem_uv->dma_addr + offset + fb->offsets[1];
 	}
 
 	actual_w = drm_rect_width(src) >> 16;
