@@ -209,14 +209,7 @@ queue_init(void *priv, struct vb2_queue *src_vq, struct vb2_queue *dst_vq)
 	src_vq->drv_priv = ctx;
 	src_vq->ops = &hantro_queue_ops;
 	src_vq->mem_ops = &vb2_dma_contig_memops;
-
-	/*
-	 * Driver does mostly sequential access, so sacrifice TLB efficiency
-	 * for faster allocation. Also, no CPU access on the source queue,
-	 * so no kernel mapping needed.
-	 */
-	src_vq->dma_attrs = DMA_ATTR_ALLOC_SINGLE_PAGES |
-			    DMA_ATTR_NO_KERNEL_MAPPING;
+	src_vq->dma_attrs = DMA_ATTR_NO_KERNEL_MAPPING;
 	src_vq->buf_struct_size = sizeof(struct v4l2_m2m_buffer);
 	src_vq->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_COPY;
 	src_vq->lock = &ctx->dev->vpu_mutex;
@@ -229,7 +222,7 @@ queue_init(void *priv, struct vb2_queue *src_vq, struct vb2_queue *dst_vq)
 
 	dst_vq->bidirectional = true;
 	dst_vq->mem_ops = &vb2_dma_contig_memops;
-	dst_vq->dma_attrs = DMA_ATTR_ALLOC_SINGLE_PAGES;
+	dst_vq->dma_attrs = 0;
 	/*
 	 * The Kernel needs access to the JPEG destination buffer for the
 	 * JPEG encoder to fill in the JPEG headers.
