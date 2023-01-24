@@ -724,14 +724,7 @@ static int rkvdec_queue_init(void *priv,
 	src_vq->drv_priv = ctx;
 	src_vq->ops = &rkvdec_queue_ops;
 	src_vq->mem_ops = &vb2_dma_contig_memops;
-
-	/*
-	 * Driver does mostly sequential access, so sacrifice TLB efficiency
-	 * for faster allocation. Also, no CPU access on the source queue,
-	 * so no kernel mapping needed.
-	 */
-	src_vq->dma_attrs = DMA_ATTR_ALLOC_SINGLE_PAGES |
-			    DMA_ATTR_NO_KERNEL_MAPPING;
+	src_vq->dma_attrs = DMA_ATTR_NO_KERNEL_MAPPING;
 	src_vq->buf_struct_size = sizeof(struct v4l2_m2m_buffer);
 	src_vq->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_COPY;
 	src_vq->lock = &rkvdec->vdev_lock;
@@ -745,8 +738,7 @@ static int rkvdec_queue_init(void *priv,
 
 	dst_vq->bidirectional = true;
 	dst_vq->mem_ops = &vb2_dma_contig_memops;
-	dst_vq->dma_attrs = DMA_ATTR_ALLOC_SINGLE_PAGES |
-			    DMA_ATTR_NO_KERNEL_MAPPING;
+	dst_vq->dma_attrs = DMA_ATTR_NO_KERNEL_MAPPING;
 	dst_vq->type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 	dst_vq->io_modes = VB2_MMAP | VB2_DMABUF;
 	dst_vq->drv_priv = ctx;
