@@ -34,7 +34,7 @@ jobs:
         sudo apt install debhelper -y
         git config --global --add safe.directory "/home/runner/work/linux-rockchip/linux-rockchip"      
         export RELEASE=$(($RELEASE_START+$GITHUB_RUN_NUMBER))
-        make
+        ./dev-make
         export RELEASE_NAME="$(./dev-make version)"
         export RELEASE_TITLE="$(./dev-make version)"
         export DESCRIPTION="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
@@ -43,5 +43,5 @@ jobs:
         echo $RELEASE
         echo $RELEASE_TITLE
         echo $RELEASE_NAME
-        gh release create --title $RELEASE_TITLE --generate-notes -R https://github.com/gustavokch/linux-mainline-kernel $RELEASE $DEB
+        gh release create --title $RELEASE_TITLE --generate-notes -R https://github.com/gustavokch/linux-rockchip $RELEASE $DEB
     
