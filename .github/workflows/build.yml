@@ -35,6 +35,7 @@ jobs:
         git config --global --add safe.directory "/home/runner/work/linux-rockchip/linux-rockchip"      
         export RELEASE=$(($RELEASE_START+$GITHUB_RUN_NUMBER))
         sudo chmod +x ./dev-make
+        ./dev-make .config
         ./dev-make kernel-package
         export RELEASE_NAME="$(./dev-make version)"
         export RELEASE_TITLE="$(./dev-make version)"
